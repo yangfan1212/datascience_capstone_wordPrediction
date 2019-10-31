@@ -1,0 +1,156 @@
+---
+title: "Capstone_WEEK2_milestone"
+author: "LI YANGFAN"
+date: "2019/10/29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is report is built to illustrate the capstone project on COURSERA. 
+In this project, i would like to build a shinyApp that takes as input a phrase (multiple words) in a text box input and outputs a prediction of the next word.
+
+The dataset that used in this project can be found by the link below:
+
+https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+The data i will be using are:
+
+en_us.blogs.txt              
+en_us.news.txt               
+en_us.twitter.txt
+
+## Preparation
+
+I would like to load in all libraries used in this file first.
+```{r,message=FALSE}
+library(stringi)
+library(tm)
+library(RWeka)
+library(ggplot2)
+library(wordcloud)
+```
+
+Load in the three datasets used to build the Corpora, i only read the first 50000 lines
+```{r message=FALSE}
+blogs <- readLines("final/en_US/en_US.blogs.txt", n=50000,encoding = "UTF-8", skipNul = TRUE)
+news <- readLines("final/en_US/en_US.news.txt",n=50000, encoding = "UTF-8", skipNul = TRUE)
+twitter <- readLines("final/en_US/en_US.twitter.txt",n=50000, encoding = "UTF-8", skipNul = TRUE)
+```
+
+Then i woould like to give some basic information about these three sets.
+
+1,for en_us.blogs
+The basic line and character counts are :
+```{r}
+stringi::stri_stats_general(blogs)
+```
+
+The distribution of the words per line is
+```{r}
+summary(stringi::stri_count_words(blogs))
+```
+
+2,for en_us.news
+The basic line and character counts are :
+```{r}
+stringi::stri_stats_general(news)
+```
+
+The distribution of the words per line is
+```{r}
+summary(stringi::stri_count_words(news))
+```
+
+3,for en_us.twitter
+The basic line and character counts are :
+```{r}
+stringi::stri_stats_general(twitter)
+```
+
+The distribution of the words per line is
+```{r}
+summary(stringi::stri_count_words(twitter))
+```
+
+## Constructing words frequency graphs
+
+Owing to the great number of data in the sets, we should use the sampling idea, i decide to take 5% sample
+```{r}
+set.seed(13333)
+sample_list <- c(sample(blogs, length(blogs) * 0.005),
+               sample(news, length(news) * 0.005),
+               sample(twitter, length(twitter) * 0.005))
+```
+
+Building the corpus according to the sample taken
+```{r}
+corpus <- VCorpus(VectorSource(iconv(sample_list,"UTF-8","ASCII",sub = "")))
+```
+
+Then i would like to exclude unnecessary characters from corpus in order to enhance efficiency;
+```{r}
+exclude_number<-function(x) gsub("[[:digit:]]","",x)
+lowcase <- function(x) sapply(x,tolower)
+exclude_blank<-function(x) gsub("\\s+"," ",x)
+exclude_URL<-function(x) gsub("http[[:alnum:]]*","",x)
+
+corpus<-tm_map(corpus,content_transformer(exclude_number))
+corpus<-tm_map(corpus,content_transformer(lowcase))
+corpus<-tm_map(corpus,content_transformer(exclude_blank)) 
+corpus<-tm_map(corpus,content_transformer(exclude_URL))
+```
+
+Then i would like to count the words frequency respectively of three categories (unigram,bigram,trigram) which can be obtained by NGramTokenizer, to count the frequency, my thought is to construct the Term Document matrix and simply sum all entries in the same row.
+
+1, unigram
+```{r}
+tdocmatrix <- TermDocumentMatrix(corpus)
+countMatrix = as.data.frame((as.matrix(tdocmatrix)))
+valuerank <- sort(rowSums(countMatrix),decreasing=TRUE)
+unigram <- data.frame(word = names(valuerank),freq=valuerank)
+unigram
+```
+
+2,bigram
+```{r}
+bigram <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+tdocmatrix2 <-TermDocumentMatrix(corpus,control = list(tokenize = bigram))
+countMatrix2 = as.data.frame((as.matrix(tdocmatrix2)) ) 
+valuerank2 <- sort(rowSums(countMatrix2),decreasing=TRUE)
+bigram <- data.frame(word = names(valuerank2),freq=valuerank2)
+bigram
+```
+
+3,trigram
+```{r}
+trigram <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+tdocmatrix3 <-TermDocumentMatrix(corpus,control = list(tokenize = trigram))
+countMatrix3 = as.data.frame((as.matrix(tdocmatrix3)) ) 
+valuerank3 <- sort(rowSums(countMatrix3),decreasing=TRUE)
+trigram <- data.frame(word = names(valuerank3),freq=valuerank3)
+trigram
+```
+
+Now we can present a graph to show the ranking frequency of each gram more directly.
+
+For unigram
+```{r}
+ggplot(toptenuni,aes(x=word,y=freq,color = word))+geom_bar(stat = "identity")
+```
+
+For bigram
+```{r}
+ggplot(toptenbi,aes(x=word,y=freq,color = word))+geom_bar(stat = "identity")
+```
+
+For trigram
+```{r}
+ggplot(toptentri,aes(x=word,y=freq,color = word))+geom_bar(stat = "identity")
+```
+
+## Steps after
+
+After the exploratory analysis of the training dataset we will be using to build the Word prediction model, there are still Prediction Steps and to see how can i optimize my model.
